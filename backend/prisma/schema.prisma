@@ -1,0 +1,231 @@
+// Shap — Prisma schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PASSENGER
+  DRIVER
+  ADMIN
+}
+
+enum RideTier {
+  OLA
+  MOJO
+  GRAND
+}
+
+enum RideStatus {
+  REQUESTED
+  BIDDING
+  ACCEPTED
+  DRIVER_ENROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  WALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  role         Role     @default(PASSENGER)
+  fullName     String
+  email        String   @unique
+  phone        String   @unique
+  passwordHash String
+  rating       Float    @default(5.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  driverProfile DriverProfile?
+  wallet        Wallet?
+  ridesAsPassenger Ride[] @relation("PassengerRides")
+  bids          Bid[]
+  sentMessages  BidMessage[]
+  promoRedemptions PromoRedemption[]
+  supportTickets SupportTicket[]
+}
+
+model DriverProfile {
+  id                 String   @id @default(uuid())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String   @unique
+  isOnline           Boolean  @default(false)
+  verification       VerificationStatus @default(PENDING)
+  currentLat         Float?
+  currentLng         Float?
+  totalTrips         Int      @default(0)
+  acceptanceRate     Float    @default(1.0)
+  vehicle            Vehicle?
+  ridesAsDriver      Ride[]   @relation("DriverRides")
+  createdAt          DateTime @default(now())
+}
+
+model Vehicle {
+  id           String   @id @default(uuid())
+  driver       DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String   @unique
+  make         String
+  model        String
+  year         Int
+  color        String
+  plate        String   @unique
+  tier         RideTier @default(OLA)
+  verification VerificationStatus @default(PENDING)
+}
+
+model Ride {
+  id            String     @id @default(uuid())
+  tier          RideTier
+  status        RideStatus @default(REQUESTED)
+
+  passenger     User       @relation("PassengerRides", fields: [passengerId], references: [id])
+  passengerId   String
+  driver        DriverProfile? @relation("DriverRides", fields: [driverId], references: [id])
+  driverId      String?
+
+  pickupLat     Float
+  pickupLng     Float
+  pickupAddr    String
+  dropLat       Float
+  dropLng       Float
+  dropAddr      String
+  distanceKm    Float
+  durationMin   Int
+
+  suggestedFare Float?
+  estimatedFare Float
+  finalFare     Float?
+  commission    Float?
+  currency      String     @default("ZAR")
+
+  scheduledFor  DateTime?
+  paymentMethod PaymentMethod @default(CASH)
+  quietRide     Boolean    @default(false)
+
+  bids          Bid[]
+  payment       Payment?
+  ratingByRider Int?
+  ratingByDriver Int?
+  promoRedemption PromoRedemption?
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Bid {
+  id         String    @id @default(uuid())
+  ride       Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  rideId     String
+  driver     User      @relation(fields: [driverId], references: [id])
+  driverId   String
+  amount     Float
+  status     BidStatus @default(PENDING)
+  messages   BidMessage[]
+  createdAt  DateTime  @default(now())
+}
+
+model BidMessage {
+  id        String   @id @default(uuid())
+  bid       Bid      @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  bidId     String
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+  balance   Float    @default(0)
+  currency  String   @default("ZAR")
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id        String   @id @default(uuid())
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  walletId  String
+  amount    Float
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id        String        @id @default(uuid())
+  ride      Ride          @relation(fields: [rideId], references: [id])
+  rideId    String        @unique
+  amount    Float
+  method    PaymentMethod
+  status    PaymentStatus @default(PENDING)
+  provider  String?
+  reference String?
+  createdAt DateTime      @default(now())
+}
+
+model Promo {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  description  String
+  discountPct  Float?
+  discountFlat Float?
+  maxUses      Int      @default(1000)
+  usedCount    Int      @default(0)
+  active       Boolean  @default(true)
+  expiresAt    DateTime?
+  redemptions  PromoRedemption[]
+}
+
+model PromoRedemption {
+  id       String @id @default(uuid())
+  promo    Promo  @relation(fields: [promoId], references: [id])
+  promoId  String
+  user     User   @relation(fields: [userId], references: [id])
+  userId   String
+  ride     Ride   @relation(fields: [rideId], references: [id])
+  rideId   String @unique
+  createdAt DateTime @default(now())
+}
+
+model SupportTicket {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  subject   String
+  body      String
+  status    String   @default("OPEN")
+  createdAt DateTime @default(now())
+}
