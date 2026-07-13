@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'SHAP_API',
-    defaultValue: 'http://10.0.2.2:4000/api',
+    defaultValue: 'https://shap-api.onrender.com/api',
   );
 
   String? _token;
